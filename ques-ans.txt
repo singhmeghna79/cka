@@ -1,0 +1,789 @@
+https://app.slack.com/client/T6PMDQ85N/CJK9753QC
+
+1. List your pv sort by name
+    List your pv sort by size
+
+Ans -> kubectl get pv --sort-by=.metadata.name
+       kubectl get pv --sort-by=.spec.capacity.storage > finename.txt
+
+
+2. All ready nodes, one of them marked as no-schedule, list all the nodes excluding the label no-schedule.
+
+Ans -> kubectl get nodes --fiels-selector spec.unschedulable=true
+
+4. Create 2 pods -- mypod1 and mypod2 , mypod2 should be scheduled to run anywhere mypod1 is running. 
+
+Ans -> 
+apiVersion: v1
+kind: Pod
+metadata:
+  name: pod-1
+  labels:
+    env: test
+spec:
+  containers:
+  - name: nginx
+    image: nginx
+    imagePullPolicy: IfNotPresent
+----------------------------------------------------
+
+apiVersion: v1
+kind: Pod
+metadata:
+  name: pod-2
+spec:
+  affinity:
+    podAffinity:
+      requiredDuringSchedulingIgnoredDuringExecution:
+      - labelSelector:
+          matchExpressions:
+          - key: env
+            operator: In
+            values:
+            - test
+        topologyKey: kubernetes.io/hostname
+  containers:
+  - name: with-pod-affinity
+    image: k8s.gcr.io/pause:2.0
+----------------------------------------------------------------------------
+
+
+5. A container will start only if a file is present. 
+
+Ans -> 
+apiVersion: v1
+kind: Pod
+metadata:
+  name: init-test-pod
+spec:
+  volumes:
+  - name: mypvc
+    emptyDir: {}
+  containers:
+  - name: myapp-container
+    image: alpine
+    command: ['sh', '-c', 'if [ -f /workdir/test.txt ]; then sleep 99999; fi']
+    volumeMounts:
+    - name: mydir
+      mountPath: /workdir
+  initContainers:
+  - name: init-myservice
+    image: busybox:1.28
+    command: ['sh', '-c', 'mkdir /workdir; echo>/workdir/test.txt']
+    volumeMounts:
+    - name: mydir
+      mountPath: /workdir
+------------------------------------------------------------------------------
+
+6.  Create a deployment running nginx version 1.12.2 that will run in 2 pods [DONE]
+	a. Scale this to 4 pods.
+	b. Scale it back to 2 pods.
+	c. Upgrade this to 1.13.8
+	d. Check the status of the upgrade.
+	e. How do you do this in a way that you can see history of what happened?
+	f. Undo the upgrade.
+
+Ans -> kubectl create deployment t-dep --image=nginx:v1.12.2 --dry-run -oyaml > t-dep.yaml
+    edit the yaml and make replicas as 2.
+    kubectl apply -f t-dep.yaml
+Ans a-> kubectl scale deployment t-dep --replicas=4
+b -> kubectl scale deployment t-dep --replicas=2
+c -> kubectl set image deployment t-dep nginx:v1.12.2=nginx:v1.13.8 --record
+d -> kubectl rollout status deployment t-dep
+e -> --record
+f -> kubectl rollout undo deployment t-dep --to-revision=?
+-------------------------------------------------------------------------------
+
+7.  Create a pod that has a liveness check. 
+
+Ans -> 
+apiVersion: v1
+kind: Pod
+metadata:
+  labels:
+    test: liveness
+  name: liveness-exec
+spec:
+  containers:
+  - name: liveness
+    image: k8s.gcr.io/busybox
+    args:
+    - /bin/sh
+    - -c
+    - touch /tmp/healthy; sleep 30; rm -rf /tmp/healthy; sleep 600
+    livenessProbe:
+      exec:
+        command:
+        - cat
+        - /tmp/healthy
+      initialDelaySeconds: 5
+      periodSeconds: 5
+---------------------------------------------------------
+
+8. Create a pod that has a readiness check. 
+
+Ans -> 
+apiVersion: v1
+kind: Pod
+metadata:
+  labels:
+    test: liveness
+  name: liveness-exec
+spec:
+  containers:
+  - name: liveness
+    image: k8s.gcr.io/busybox
+    args:
+    - /bin/sh
+    - -c
+    - touch /tmp/healthy; sleep 30; rm -rf /tmp/healthy; sleep 600
+    readinessProbe:
+      exec:
+        command:
+        - cat
+        - /tmp/healthy
+      initialDelaySeconds: 5
+      periodSeconds: 5
+--------------------------------------------------------------------------
+9. Create a busybox container without a manifest. Then edit the manifest. 
+
+Ans ->  kubectl run t-pod --image=busybox --restart=Never
+After kubectl edit pod t-pod changed imageto nginx and saved the pod status was completed not running
+
+------------------------------------------------------------------------------
+
+10. Create a job that runs every 3 minutes and prints out the current time
+
+Ans -> kubectl run  print-date-cronjob --schedule="*/3 * * * *" --restart=OnFailure --image=busybox -- /bin/sh -c "date; echo Hello from the Kubernetes cluster"
+
+11. Create a job that runs 20 times, 5 containers at a time, and prints "Hello parallel world"
+
+Ans -> kubectl run parallel-jobs --image=nginx --restart=OnFailure --dry-run -o yaml -- /bin/sh -c "date; echo hello world" > job.yaml
+apiVersion: batch/v1
+kind: Job
+metadata:
+  creationTimestamp: null
+  labels:
+    run: parallel-jobs
+  name: parallel-jobs
+spec:
+  parallelism: 5
+  completions: 20
+  backoffLimit: 6
+  template:
+    metadata:
+      creationTimestamp: null
+      labels:
+        run: parallel-jobs
+    spec:
+      containers:
+      - args:
+        - /bin/sh
+        - -c
+        - date; echo hello world
+        image: nginx
+        name: parallel-jobs
+        resources: {}
+      restartPolicy: OnFailure
+status: {}
+----------------------------------------------------------------------------------
+
+12. Get the list of pod by doing a CURL to the kube-apiserver.
+Ans ->
+
+13.  Deploy a pod with the wrong image name (like --image=nginy) and find the error message
+
+Ans -> ImagePullBackOff
+
+14. Get logs for a pod which has multiple containers running. 
+
+Ans -> kubectl logs -f pod-name -c container-name
+
+15. Deploy nginx with 3 replicas and then expose a port
+	a. Use port forwarding to talk to a specific port
+
+Ans -> kubectl create deployment nginx --image=nginx 
+       kubectl scale deployment nginx --replicas=3
+       Kubectl edit deployment nginx
+       edit spec.container add port 
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: nginx
+spec:
+  selector:
+    matchLabels:
+      run: nginx
+  replicas: 2
+  template:
+    metadata:
+      labels:
+        run: nginx
+    spec:
+      containers:
+      - name: nginx
+        image: nginx
+        ports:
+        - containerPort: 80
+kubectl port-forward {pod-name} 80:8080 
+
+16. Create a service that uses an external load balancer and points to a 3 pod cluster running nginx.
+Ans -> kubectl expose  deployment nginx --type=LoadBalancer
+
+17. Get the status of all the master components
+Ans -> kubectl get componentstatuses
+
+18.  Create a pod that runs on a given node
+
+Ans -> kubectl run nginx --image=nginx --generator=run-pod/v1 --restart=Never --dry-run -oyaml > p.yaml
+       edit p.yaml add nodeName
+apiVersion: v1
+kind: Pod
+metadata:
+  creationTimestamp: null
+  labels:
+    run: nginx
+  name: nginx
+spec:
+  containers:
+  - image: nginx
+    name: nginx
+    resources: {}
+  dnsPolicy: ClusterFirst
+  restartPolicy: Never
+  nodeName: gke-alert-test-cluster-default-pool-696567dc-3q9p
+status: {}
+-------------------------------------------------------------------------------
+
+19.  Create a pod that uses secrets 
+	a. Pull secrets from environment variables
+	b. Pull secrets from a volume
+	c. Dump the secrets out via kubectl to show it worked
+
+Ans -> echo -n 'admin' > ./username.txt
+echo -n 'admin' > ./password.txt
+
+kubectl create secret generic db-user-pass --from-file=./username.txt --from-file=./password.txt
+-------------OR-----------
+
+kubectl create secret generic secret123 --from-literal=username=admin --from-literal=password='admin'
+
+apiVersion: v1
+kind: Pod
+metadata:
+  name: mypod
+spec:
+  containers:
+  - name: mypod
+    image: nginx
+    volumeMounts:
+    - name: foo
+      mountPath: "/etc/foo"
+      readOnly: true
+  volumes:
+  - name: foo
+    secret:
+      secretName: secret123
+      items:
+      - key: username
+        path: my-group/my-username
+
+Ans -> a ->
+
+apiVersion: v1
+kind: Pod
+metadata:
+  name: secret-env-pod
+spec:
+  containers:
+  - name: mycontainer
+    image: nginx
+    env:
+      - name: SECRET_USERNAME
+        valueFrom:
+          secretKeyRef:
+            name: secret123
+            key: username
+      - name: SECRET_PASSWORD
+        valueFrom:
+          secretKeyRef:
+            name: secret123
+            key: password
+  restartPolicy: Never
+------------------------------------------------------------
+
+Ans -> b ->
+
+apiVersion: v1
+kind: Pod
+metadata:
+  name: mypod
+spec:
+  containers:
+  - name: mypod
+    image: nginx
+    volumeMounts:
+    - name: foo
+      mountPath: "/etc/foo"
+      readOnly: true
+  volumes:
+  - name: foo
+    secret:
+      secretName: secret123
+      items:
+      - key: username
+        path: my-group/my-username
+
+----------------------------------------------------------------------------
+
+Ans -> c -> kubectl get secret secret123 -oyamls
+----------------------------------------------------------------------------
+
+20. Create a static pod and then delete the pod.
+Ans -> 
+
+21. Create a pod that do not get IP from the range of allocated CIDR block. Ensure that this is not a static pod.
+
+Ans -> 
+apiVersion: v1
+kind: Pod
+metadata:
+  creationTimestamp: null
+  labels:
+    run: busybox1
+  name: busybox1
+spec:
+  containers:
+  - command:
+    - /bin/sh
+    - -c
+    - sleep "10000000000000"
+    image: busybox
+    name: busybox1
+    resources: {}
+  dnsPolicy: ClusterFirstWithHostNet
+  hostNetwork: true
+  restartPolicy: Never
+status: {}
+----------------------------------------------------------------------------------------------
+
+22. Create a service that uses a scratch disk. 
+	a. Change the service to mount a disk from the host. [Local-PV]
+	b. Change the service to mount a persistent volume. [hostPath PV]
+
+Ans -> b->
+
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: task-pv-volume
+  labels:
+    type: local
+spec:
+  storageClassName: manual
+  capacity:
+    storage: 10Gi
+  accessModes:
+    - ReadWriteOnce
+  hostPath:
+    path: "/mnt/data"
+--------------
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: task-pv-claim
+spec:
+  storageClassName: manual
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 3Gi  
+
+------------------------------------------
+
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  creationTimestamp: null
+  labels:
+    app: nginx
+  name: nginx
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: nginx
+  strategy: {}
+  template:
+    metadata:
+      creationTimestamp: null
+      labels:
+        app: nginx
+    spec:
+      containers:
+      - image: nginx
+        name: nginx
+        volumeMounts:
+        - name: my-vol
+          mountPath: /my-vol
+      volumes:
+      - name: my-vol
+        persistentVolumeClaim:
+          claimName: task-pv-claim
+----------------------------------------------------------
+
+Ans -> a ->
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: task-pv-volume
+spec:
+  capacity:
+    storage: 100Gi
+  # volumeMode field requires BlockVolume Alpha feature gate to be enabled.
+  volumeMode: Filesystem
+  accessModes:
+  - ReadWriteOnce
+  persistentVolumeReclaimPolicy: Delete
+  storageClassName: local-storage
+  local:
+    path: /mnt/disks/ssd1
+  nodeAffinity:
+    required:
+      nodeSelectorTerms:
+      - matchExpressions:
+        - key: kubernetes.io/hostname
+          operator: In
+          values:
+          - example-node
+--------------------------------------------------------------------
+
+24. Create a service that manually requires endpoint creation - and create that too. 
+Ans ->
+
+apiVersion: v1
+kind: Pod
+metadata:
+  creationTimestamp: null
+  labels:
+    run: nginx
+  name: nginx
+spec:
+  containers:
+  - image: nginx
+    name: nginx
+    ports:
+      - containerPort: 80
+    resources: {}
+  dnsPolicy: ClusterFirst
+  restartPolicy: Never
+status: {}
+--------------------------------
+
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-service
+spec:
+  type: NodePort
+  ports:
+    - protocol: TCP
+      port: 80
+      targetPort: 8080
+--------------------------------------
+
+apiVersion: v1
+kind: Endpoints
+metadata:
+  name: my-service
+subsets:
+  - addresses:
+      - ip: 10.20.0.37
+    ports:
+      - port: 80
+-------------------------
+
+25. Create a daemon set
+	a. Change the update strategy to do a rolling update but delaying 30 seconds 
+
+Ans -> 
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: ds
+  labels:
+    app: ds
+spec:
+  selector:
+    matchLabels:
+      app: ds
+  template:
+    metadata:
+      labels:
+        app: ds
+    spec:
+      containers:
+      - name: ds
+        image: nginx
+  updateStrategy:
+    type: RollingUpdate
+  minReadySeconds: 30
+  --------------------------------------------------
+
+26. Create a horizontal autoscaling group that starts with 2 pods and scales when CPU usage is over 50%
+
+  Ans -> kubectl autoscale deployment nginx --max=10 --min=2 --cpu-percent=50
+
+27.  Create a custom resource definition 
+	a. Display it in the API with curl
+
+Ans -> 
+
+28.  Create a service that references an externalname.
+	a. Test that this works from another pod
+
+Ans -> apiVersion: v1
+kind: Service
+metadata:
+  name: my-service
+  namespace: prod
+spec:
+  type: ExternalName
+  externalName: github.com
+
+  Ans -> a -> Exec into a busybox:1.28.4 pod do a wget svc-name or nslookup svc-name 
+
+29.  Create a pod that runs all processes as user 1000.
+Ans -> 
+apiVersion: v1
+kind: Pod
+metadata:
+  name: security-context-demo
+spec:
+  securityContext:
+    runAsUser: 1000
+  containers:
+  - name: sec-ctx-demo
+    image: busybox
+    securityContext:
+      allowPrivilegeEscalation: false 
+------------------------------------------------------
+30.  Write an ingress rule that redirects calls to /foo to one service and to /bar to another
+
+Ans -> 
+apiVersion: networking.k8s.io/v1beta1
+kind: Ingress
+metadata:
+  name: simple-fanout-example
+  annotations:
+    nginx.ingress.kubernetes.io/rewrite-target: /
+spec:
+  rules:
+  - host: foo.bar.com
+    http:
+      paths:
+      - path: /foo
+        backend:
+          serviceName: service1
+          servicePort: 4200
+      - path: /bar
+        backend:
+          serviceName: service2
+          servicePort: 8080
+
+--------------------------------------------------------
+
+31. Write a service that exposes nginx on a nodeport
+	a. Change it to use a cluster port
+	b. Scale the service
+	c. Change it to use an external IP
+	d. Change it to use a load balancer
+
+Ans -> kubectl expose deployment nginx --type=NodePort --port=80 --target-port=80 --name=my-svc --protocol=TCP
+
+a -> kubectl edit svc my-svc. change NodePort to ClusterIP and remove NodePort
+b -> kubectl scale deployment nginx --replicas=4
+c -> 
+d -> kubectl expose deployment nginx --type=LoadBalancer
+
+32. Deploy nginx with 3 replicas and then expose a port 
+	a. Use port forwarding to talk to a specific port
+ 
+
+Ans -> kubectl create deployment nginx --image=nginx
+       edit deployment and add container port 80
+     kubectl port-forward nginx-7db75b8b78-kk7wf 8080:80
+
+33.  Get logs for Kubernetes master components
+Ans ->
+
+34.  Get logs for Kubelet. 
+Ans -> 
+
+35.  Backup an etcd cluster 
+Ans -> 
+ETCDCTL_API=3 etcdctl snapshot save snaps --cacert="/etc/kubernetes/pki/etcd/ca.crt" --key="/etc/kubernetes/pki/etcd/server.key" --cert="/etc/kubernetes/pki/etcd/server.crt"
+ETCDCTL_API=3 etcdctl --write-out=table snapshot status snaps
+
+
+
+36. List the members of an etcd cluster
+ 
+Ans -> kubectl get componentstatuses
+etcd-0               Healthy   {"health": "true"}
+scheduler            Healthy   ok
+controller-manager   Healthy   ok
+etcd-1               Healthy   {"health": "true"}
+
+37.  Find the health of etcd
+Ans -> Healthy
+
+38. Create a namespace 
+	a. Run a pod in the new namespace
+	b. Put memory limits on the namespace
+	c. Limit pods to 2 persistent volumes in this namespace
+
+Ans -> kubectl create ns test
+a -> kubectl run nginx --image=nginx --restart=Never --generator=run-pod/v1 -n test
+b -> && c -> 
+apiVersion: v1
+kind: ResourceQuota
+metadata:
+  name: mem-cpu-demo
+  namespace: test
+spec:
+  hard:
+    requests.cpu: "1"
+    requests.memory: 1Gi
+    limits.cpu: "2"
+    limits.memory: 2Gi
+    persistentvolumeclaims: "2"
+                OR
+kubectl create quota my-quota
+--hard=cpu=1,memory=1G,pods=2,services=3,replicationcontrollers=2,resourcequotas=1,secrets=5,persistentvolumeclaims=10
+
+--------------------------------------------------------------------------
+
+39. Create a networking policy such that only pods with the label access=granted can talk to it. 
+	a. Create an nginx pod and attach this policy to it. 
+	b. Create a busybox pod and attempt to talk to nginx - should be blocked
+	c. Attach the label to busybox and try again - should be allowed
+
+
+Ans -> 
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: test-network-policy
+  namespace: default
+spec:
+  podSelector:
+    matchLabels:
+      access: grant
+  policyTypes:
+  - Ingress
+  - Egress
+  ingress:
+  - from:
+    - podSelector:
+        matchLabels:
+          test: test1
+
+40. Create a multi containers of nginx, redis and consul.
+Ans -> 
+41. Troubleshooting not ready state node.
+Ans -> 
+
+42. Add missing worker node -- TLS bootstrapping.
+Ans -> 
+
+43. Set up a Kubernetes cluster from scratch by using Kubeadm 
+Ans ->
+
+44. Create Redis pod with non-pvolume.
+Ans ->
+apiVersion: v1
+kind: Pod
+metadata:
+  labels:
+    run: nginx
+  name: nginx
+spec:
+  containers:
+  - image: nginx
+    name: nginx
+    volumeMounts:
+      name: vol
+      mountPath: "/workdir"
+    ports:
+      - containerPort: 80
+    resources: {}
+  volumes:
+  - name: vol
+    emptyDir: {}
+  dnsPolicy: ClusterFirst
+  restartPolicy: Never
+status: {}
+------------------------------------------------------
+
+45.  Creating PVolume with host path.
+Ans ->
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: task-pv-volume
+  labels:
+    type: local
+spec:
+  storageClassName: manual
+  capacity:
+    storage: 10Gi
+  accessModes:
+    - ReadWriteOnce
+  hostPath:
+    path: "/mnt/data"
+---------------------------------------
+46.  Create pods,service in particular namespace, list all services in particular namespace.
+
+Ans -> kubectl run ngins --image=nginx --restart=Never -n test
+kubectl get pods -n test
+kubectl get svc -n test
+
+47. Create nginx deployment nginx-random expose  it
+then create another pod busybox and do the following: 
+(a) Dnlookup service
+(b) Dnslookup pod.
+
+Ans -> 
+
+48. Expose a service to Nodeport.
+ANs -> --type=NodePort
+
+49. Create a pod that by passes kube-scheduler. Ensure that this is not a static pod. 
+
+apiVersion: v1
+kind: Pod
+metadata:
+  labels:
+    run: nginx
+  name: nginx
+spec:
+  schedulerName: meghna
+  nodeName: xyz
+  containers:
+  - image: nginx
+    name: nginx
+    volumeMounts:
+      name: vol
+      mountPath: "/workdir"
+    ports:
+      - containerPort: 80
+    resources: {}
+  volumes:
+  - name: vol
+    emptyDir: {}
+  dnsPolicy: ClusterFirst
+  restartPolicy: Never
+status: {}
+-------------------------------------------------------

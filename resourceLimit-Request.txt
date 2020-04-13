@@ -1,0 +1,98 @@
+						kubenetes resource limit and request concepts
+-----------------------------------------------------------------------------------------------------------------------------------------------
+
+1 -> If you want to set resource limit on a namespace
+	--> use limit range
+	-->   apiVersion: v1
+		kind: LimitRange
+		metadata:
+		  name: mem-limit-range
+		spec:
+		  limits:
+		  - default:
+		      memory: 512Mi
+		    defaultRequest:
+		      memory: 256Mi
+		    type: Container
+
+	--> If you create a pod with a container with no limit and request default limit and request is set.
+	--> If you create a pod with a container with default limit but no default request then the container default limit and default 	    request both will be set as the limit range default limit.
+	--> If you create a pod with a container with a Container’s request, but not its limit then default limit will be set and default  	       request will be set to the container requested.
+	--> Note ( If we apply limit range on a namespace all the containers must have satisfy default limit and request but the total sum of all the container's limit or request can exceed the default limmit range value. But in resource quota the total sum must not exceed that defined in resource quota)
+
+
+-----------------------------------------------------------------------------------------------------------------------------------------------
+
+2 ->  A resource quota imposes on a namespace:
+
+	--> Every Container that runs in the namespace must have its own memory limit.
+	--> The total amount of memory used by all Containers in the namespace must not exceed a specified limit.
+	--> If a Container does not specify its own memory limit, it is given the default limit, and then it can be allowed to run in a 	    namespace that is restricted by a quota.
+
+-------------------------------------------------------------------------------------------------------------------------------------------------
+
+3 -> Limit range with min max value 
+	      apiVersion: v1
+		kind: LimitRange
+		metadata:
+		  name: mem-min-max-demo-lr
+		spec:
+		  limits:
+		  - max:
+		      memory: 1Gi
+		    min:
+		      memory: 500Mi
+		    type: Container
+
+	--> If we dont dont specify anything in container
+		It will look like 
+			limits:
+			  - default:
+			      memory: 1Gi
+			    defaultRequest:
+			      memory: 1Gi
+			    max:
+			      memory: 1Gi
+			    min:
+			      memory: 500Mi
+			    type: Container
+
+	--> If the Container does not specify its own memory request and limit, assign the default memory request and limit to the Container.
+
+	    Verify that the Container has a memory request that is greater than or equal to 500 MiB.
+
+	    Verify that the Container has a memory limit that is less than or equal to 1 GiB.
+
+------------------------------------------------------------------------------------------------------------------------------------------------
+
+4 -> Create a resource quota 
+	-->   apiVersion: v1
+		kind: ResourceQuota
+		metadata:
+		  name: mem-cpu-demo
+		spec:
+		  hard:
+		    requests.cpu: "1"
+		    requests.memory: 1Gi
+		    limits.cpu: "2"
+		    limits.memory: 2Gi
+
+	--> The ResourceQuota places these requirements on the quota-mem-cpu-example namespace:
+
+	    -->	Every Container must have a memory request, memory limit, cpu request, and cpu limit.
+	    -->	The memory request total for all Containers must not exceed 1 GiB.
+	    -->	The memory limit total for all Containers must not exceed 2 GiB.
+	    -->	The CPU request total for all Containers must not exceed 1 cpu.
+	    -->	The CPU limit total for all Containers must not exceed 2 cpu.
+
+	--> Resource quota for pods
+	      apiVersion: v1
+		kind: ResourceQuota
+		metadata:
+		  name: pod-demo
+		spec:
+		  hard:
+		    pods: "2"
+-----------------------------------------------------------------------------------------------------------------------------------------------
+
+
